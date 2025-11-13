@@ -12,10 +12,14 @@ import android.util.Log;
 import android.view.KeyEvent;
 import android.view.accessibility.AccessibilityEvent;
 
-import java.time.LocalDate;
 import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
 import java.util.Locale;
+
+import android.content.BroadcastReceiver;
+import android.content.Intent;
+import android.content.IntentFilter;
+import android.content.Context;
 
 public class TimeSpeakerService extends AccessibilityService implements TextToSpeech.OnInitListener {
 
@@ -27,7 +31,6 @@ public class TimeSpeakerService extends AccessibilityService implements TextToSp
     private boolean ttsSpeaking = false;  // czy TTS mówi
     private int lastSpokenKey = -1;       // klawisz, który uruchomił TTS (np. STAR lub 6)
     private AudioManager audioManager;
-    @androidx.annotation.Nullable
     private AudioFocusRequest audioFocusReq;
     private SoundPool soundPool;
     private int robotSoundId = 0;
@@ -36,6 +39,7 @@ public class TimeSpeakerService extends AccessibilityService implements TextToSp
     private static final Locale LOCALE_PL = new Locale("pl", "PL");
     private static final DateTimeFormatter FMT = DateTimeFormatter.ofPattern("HH:mm");
     private static final DateTimeFormatter DATE_FMT = DateTimeFormatter.ofPattern("EEEE, d MMMM yyyy", LOCALE_PL);
+    private BroadcastReceiver screenReceiver;
 
     @Override
     protected void onServiceConnected() {
@@ -58,6 +62,19 @@ public class TimeSpeakerService extends AccessibilityService implements TextToSp
             if (status == 0 && sampleId == robotSoundId) robotLoaded = true;
         });
         robotSoundId = soundPool.load(this, R.raw.robot, 1);
+
+        IntentFilter filter = new IntentFilter(Intent.ACTION_SCREEN_ON);
+        screenReceiver = new BroadcastReceiver() {
+            @Override
+            public void onReceive(Context context, Intent intent) {
+                if (Intent.ACTION_SCREEN_ON.equals(intent.getAction())) {
+                    Log.d("KGO", "ACTION_SCREEN_ON -> playRobot()");
+                    playRobot();
+                }
+            }
+        };
+        registerReceiver(screenReceiver, filter);
+
         tts = new TextToSpeech(this, this);
     }
 
@@ -96,7 +113,7 @@ public class TimeSpeakerService extends AccessibilityService implements TextToSp
         if (event.getAction() == KeyEvent.ACTION_UP) {
             if (code == lastConsumedKey) {
                 lastConsumedKey = -1;
-                return true; // połykamy UP, by dialer nie przejął
+                return true;
             }
             return false;
         }
@@ -104,35 +121,50 @@ public class TimeSpeakerService extends AccessibilityService implements TextToSp
         if (event.getAction() != KeyEvent.ACTION_DOWN) return false;
         if (event.getRepeatCount() > 0) return false;
 
-        long now = System.currentTimeMillis();
-        if (now - lastHandledAt < DEBOUNCE_MS) return true;
-
         boolean isStar   = code == KeyEvent.KEYCODE_STAR;
         boolean isSix    = code == KeyEvent.KEYCODE_6 || code == KeyEvent.KEYCODE_NUMPAD_6;
-        boolean isSeven  = code == KeyEvent.KEYCODE_7 || code == KeyEvent.KEYCODE_NUMPAD_7;
+        boolean isSeven  = code == KeyEvent.KEYCODE_MENU;
         boolean isNine   = code == KeyEvent.KEYCODE_9 || code == KeyEvent.KEYCODE_NUMPAD_9;
-        boolean isZero   = code == KeyEvent.KEYCODE_0 || code == KeyEvent.KEYCODE_NUMPAD_0; // NEW
+        boolean isZero   = code == KeyEvent.KEYCODE_0 || code == KeyEvent.KEYCODE_NUMPAD_0;
 
         if (!isStar && !isSix && !isSeven && !isNine && !isZero) return false;
+
+        boolean isToggleMute = ttsSpeaking && (code == lastSpokenKey) && (isStar || isSix);
+
+        long now = System.currentTimeMillis();
+
+        if (!isToggleMute && (now - lastHandledAt < DEBOUNCE_MS)) return true;
 
         lastHandledAt = now;
         lastConsumedKey = code;
 
+        Log.d("KGO", "Key code: " + code +
+                ", ttsSpeaking=" + ttsSpeaking +
+                ", lastSpokenKey=" + lastSpokenKey +
+                ", isToggleMute=" + isToggleMute);
+
+        if (isNine) {
+            muteTts();
+            return true;
+        }
+
+        if (isToggleMute) {
+            muteTts();
+            return true;
+        }
+
         if (isStar) {
-            // toggle do TTS jeśli używasz – zostawiasz jak masz
             speakTimeWithKey(code);
         } else if (isSix) {
             speakDateWithKey(code);
         } else if (isSeven) {
             playRobot();
-        } else if (isNine) {
-            muteTts();
         } else if (isZero) {
-            RequestCallPermissionActivity.start(this, "+48888868868");// NEW
+            RequestCallPermissionActivity.start(this, "+48888868868");
         }
-
         return true;
     }
+
 
     private void muteTts() {
         if (tts != null) {

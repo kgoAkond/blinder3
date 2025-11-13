@@ -38,15 +38,6 @@ public class MainActivity extends AppCompatActivity implements TextToSpeech.OnIn
         );
         lp.topMargin = 200;
 
-
-        Intent i3 = new Intent(this, ScreenOnBeepService.class);
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            startForegroundService(i3);
-        } else {
-            startService(i3);
-        }
-
-
         tts = new TextToSpeech(this, this);
     }
 
