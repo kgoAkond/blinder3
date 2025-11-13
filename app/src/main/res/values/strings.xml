@@ -1,0 +1,8 @@
+<resources>
+    <string name="app_name">Time Speaker</string>
+    <string name="btn_open_a11y">Otwórz Ułatwienia dostępu (włącz usługę)</string>
+    <string name="btn_test_say_time">Powiedz godzinę (test)</string>
+    <string name="accessibility_service_description">
+        Mówi aktualną godzinę po naciśnięciu klawisza głośności.
+    </string>
+</resources>
