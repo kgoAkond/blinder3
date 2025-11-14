@@ -17,10 +17,6 @@ import java.util.Locale;
 
 public class MainActivity extends AppCompatActivity implements TextToSpeech.OnInitListener {
 
-    private final DateTimeFormatter fmt = DateTimeFormatter.ofPattern("HH:mm");
-    private TextToSpeech tts;
-    private boolean ready = false;
-
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -38,21 +34,14 @@ public class MainActivity extends AppCompatActivity implements TextToSpeech.OnIn
         );
         lp.topMargin = 200;
 
-        tts = new TextToSpeech(this, this);
     }
 
     @Override
     public void onInit(int status) {
-        ready = (status == TextToSpeech.SUCCESS);
-        if (ready) tts.setLanguage(new Locale("pl", "PL"));
     }
 
     @Override
     protected void onDestroy() {
-        if (tts != null) {
-            tts.stop();
-            tts.shutdown();
-        }
         super.onDestroy();
     }
 }
