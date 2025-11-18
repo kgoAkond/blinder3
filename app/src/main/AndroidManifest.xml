@@ -59,6 +59,11 @@
             android:exported="false"
             android:theme="@style/Theme.MaterialComponents.DayNight.NoActionBar" />
 
+        <activity
+            android:name=".OutgoingCallActivity"
+            android:exported="false"
+            android:theme="@style/Theme.MaterialComponents.DayNight.NoActionBar" />
+
         <service
             android:name=".TimeSpeakerService"
             android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE"

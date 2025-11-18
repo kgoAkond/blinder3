@@ -1,6 +1,5 @@
 package com.example.blind3;
 
-import android.Manifest;
 import android.accessibilityservice.AccessibilityService;
 import android.accessibilityservice.AccessibilityServiceInfo;
 import android.content.ActivityNotFoundException;
@@ -8,19 +7,15 @@ import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
-import android.content.pm.PackageManager;
 import android.media.AudioAttributes;
 import android.media.AudioFocusRequest;
 import android.media.AudioManager;
 import android.media.SoundPool;
 import android.os.Build;
 import android.speech.tts.TextToSpeech;
-import android.telecom.TelecomManager;
 import android.util.Log;
 import android.view.KeyEvent;
 import android.view.accessibility.AccessibilityEvent;
-
-import androidx.core.content.ContextCompat;
 
 import com.example.blind3.model.StartActionEnum;
 
@@ -143,7 +138,6 @@ public class TimeSpeakerService extends AccessibilityService implements TextToSp
         }
 
 
-
         if (code == KeyEvent.KEYCODE_DPAD_CENTER) {
             MyInCallService.answerRingingCallIfPossible();
             return true;
@@ -172,38 +166,29 @@ public class TimeSpeakerService extends AccessibilityService implements TextToSp
         }
 
         if (step == StartActionEnum.SAY_TIME) {
+            showMainActivity();
             speakTimeWithKey(code);
         } else if (step == StartActionEnum.SAY_DATE) {
+            showMainActivity();
             speakDateWithKey(code);
         } else if (step == StartActionEnum.CHECK_ACTIVE) {
+            showMainActivity();
             playSound(robotSoundId);
         } else if (step == StartActionEnum.ASSISTANCE) {
             launchAssistant();
         } else if (step == StartActionEnum.HOT_CALL) {
             RequestCallPermissionActivity.start(this, "+48888868868");
         }
+
         return true;
     }
 
-
-    private void answerCall() {
-        // Sprawdź uprawnienia przed próbą odebrania
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.ANSWER_PHONE_CALLS) != PackageManager.PERMISSION_GRANTED) {
-            Log.e("TimeSpeakerService", "ANSWER_PHONE_CALLS permission not granted.");
-            return;
-        }
-
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            TelecomManager telecomManager = (TelecomManager) getSystemService(Context.TELECOM_SERVICE);
-            if (telecomManager != null) {
-                try {
-                    telecomManager.acceptRingingCall();
-                    Log.d("TimeSpeakerService", "Call answered using TelecomManager.");
-                } catch (SecurityException e) {
-                    Log.e("TimeSpeakerService", "SecurityException on acceptRingingCall: " + e.getMessage());
-                }
-            }
-        }
+    private void showMainActivity() {
+        Intent intent = new Intent(this, MainActivity.class);
+        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK
+                | Intent.FLAG_ACTIVITY_CLEAR_TOP
+                | Intent.FLAG_ACTIVITY_SINGLE_TOP);
+        startActivity(intent);
     }
 
     private void muteTts() {

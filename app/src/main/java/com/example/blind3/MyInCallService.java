@@ -37,10 +37,17 @@ public class MyInCallService extends InCallService {
         currentCall = call;
         currentCall.registerCallback(callCallback);
 
-        // Otwórz nasze proste UI do rozmowy
-        Intent i = new Intent(this, SimpleAnswerActivity.class);
-        i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
-        startActivity(i);
+        int state = call.getDetails().getState();
+        Log.d(TAG, "onCallAdded state=" + state);
+
+        // Pierwsze wywołanie UI w zależności od stanu
+        if (state == Call.STATE_RINGING) {
+            // połączenie przychodzące
+            showIncomingUi();
+        } else if (state == Call.STATE_DIALING || state == Call.STATE_CONNECTING) {
+            // połączenie wychodzące
+            showOutgoingUi();
+        }
     }
 
     @Override
@@ -58,12 +65,30 @@ public class MyInCallService extends InCallService {
         @Override
         public void onStateChanged(Call call, int state) {
             Log.d(TAG, "onStateChanged: " + call + " state=" + state);
-            // Możesz tu np. zamknąć Activity, gdy rozmowa się rozłączy
-            if (state == Call.STATE_DISCONNECTED) {
+
+            // Na wszelki wypadek reagujemy także na zmiany stanu
+            if (state == Call.STATE_RINGING) {
+                showIncomingUi();
+            } else if (state == Call.STATE_DIALING || state == Call.STATE_CONNECTING) {
+                showOutgoingUi();
+            } else if (state == Call.STATE_DISCONNECTED) {
                 SimpleAnswerActivity.finishIfShowing();
+                OutgoingCallActivity.finishIfShowing();
             }
         }
     };
+
+    private void showIncomingUi() {
+        Intent i = new Intent(this, SimpleAnswerActivity.class);
+        i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
+        startActivity(i);
+    }
+
+    private void showOutgoingUi() {
+        Intent i = new Intent(this, OutgoingCallActivity.class);
+        i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
+        startActivity(i);
+    }
 
     public void answerCurrentCall() {
         if (currentCall == null) {
@@ -98,5 +123,15 @@ public class MyInCallService extends InCallService {
         if (sInstance != null) {
             sInstance.disconnectCurrentCall();
         }
+    }
+
+    public static String getCurrentCallAddress() {
+        if (sInstance != null && sInstance.currentCall != null) {
+            android.net.Uri handle = sInstance.currentCall.getDetails().getHandle();
+            if (handle != null) {
+                return handle.getSchemeSpecificPart();
+            }
+        }
+        return null;
     }
 }
