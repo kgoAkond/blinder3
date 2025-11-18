@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:orientation="vertical"
+    android:gravity="center"
+    android:padding="24dp"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+    <Button
+        android:id="@+id/btn_answer"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Odbierz" />
+
+    <View
+        android:layout_width="0dp"
+        android:layout_height="16dp" />
+
+    <Button
+        android:id="@+id/btn_hangup"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Rozłącz" />
+
+</LinearLayout>

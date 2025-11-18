@@ -1,44 +1,107 @@
 package com.example.blind3;
 
+import android.Manifest;
+import android.app.role.RoleManager;
 import android.content.Intent;
+import android.content.pm.PackageManager;
 import android.os.Build;
 import android.os.Bundle;
 import android.provider.Settings;
 import android.speech.tts.TextToSpeech;
+import android.widget.Button;
+import android.widget.Toast;
 
+import androidx.activity.result.ActivityResultLauncher;
+import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.appcompat.widget.LinearLayoutCompat;
+import androidx.core.app.ActivityCompat;
+import androidx.core.content.ContextCompat;
 
 import com.google.android.material.button.MaterialButton;
 
 import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Locale;
 
-public class MainActivity extends AppCompatActivity implements TextToSpeech.OnInitListener {
+public class MainActivity extends AppCompatActivity {
+
+    private static final int PERMISSIONS_REQUEST_CODE = 101;
+    private ActivityResultLauncher<Intent> roleLauncher;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        // Ustaw widok z pliku XML, który zawiera oba przyciski
+        setContentView(R.layout.activity_main);
 
-        MaterialButton openBtn = new MaterialButton(this);
-        openBtn.setText(getString(R.string.btn_open_a11y));
-        openBtn.setOnClickListener(v ->
+        // Znajdź przyciski w layoucie za pomocą ich ID
+        Button btnEnableAccessibility = findViewById(R.id.btnEnableAccessibility);
+        Button btnSetDefaultDialer = findViewById(R.id.btnSetDefaultDialer);
+
+        // Ustaw listener dla przycisku "Włącz usługę dostępności"
+        btnEnableAccessibility.setOnClickListener(v ->
                 startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
         );
-        setContentView(openBtn);
 
-        LinearLayoutCompat.LayoutParams lp = new LinearLayoutCompat.LayoutParams(
-                LinearLayoutCompat.LayoutParams.MATCH_PARENT,
-                LinearLayoutCompat.LayoutParams.WRAP_CONTENT
-        );
-        lp.topMargin = 200;
+        // Inicjalizacja launchera do obsługi wyniku prośby o rolę dialera
+        roleLauncher = registerForActivityResult(new ActivityResultContracts.StartActivityForResult(), result -> {
+            if (result.getResultCode() == RESULT_OK) {
+                Toast.makeText(this, "Aplikacja ustawiona jako domyślny telefon.", Toast.LENGTH_SHORT).show();
+            } else {
+                Toast.makeText(this, "Nie udało się ustawić aplikacji jako domyślnej.", Toast.LENGTH_SHORT).show();
+            }
+        });
 
+        // Ustaw listener dla przycisku "Ustaw jako domyślny telefon"
+        btnSetDefaultDialer.setOnClickListener(v -> requestRoleDialer());
+        // Sprawdź i poproś o niezbędne uprawnienia
+        checkAndRequestPermissions();
     }
 
-    @Override
-    public void onInit(int status) {
+    private void checkAndRequestPermissions() {
+        // Lista uprawnień do sprawdzenia
+        String[] permissions = new String[]{
+                Manifest.permission.READ_CONTACTS,
+                Manifest.permission.READ_PHONE_STATE,
+                Manifest.permission.CALL_PHONE // Dodane dla spójności
+        };
+
+        List<String> listPermissionsNeeded = new ArrayList<>();
+        for (String p : permissions) {
+            if (ContextCompat.checkSelfPermission(this, p) != PackageManager.PERMISSION_GRANTED) {
+                listPermissionsNeeded.add(p);
+            }
+        }
+
+        // Jeśli są potrzebne jakieś uprawnienia, poproś o nie
+        if (!listPermissionsNeeded.isEmpty()) {
+            ActivityCompat.requestPermissions(this,
+                    listPermissionsNeeded.toArray(new String[0]),
+                    PERMISSIONS_REQUEST_CODE);
+        }
     }
+    private void requestRoleDialer() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            RoleManager roleManager = (RoleManager) getSystemService(ROLE_SERVICE);
+            if (roleManager.isRoleAvailable(RoleManager.ROLE_DIALER)) {
+                if (!roleManager.isRoleHeld(RoleManager.ROLE_DIALER)) {
+                    Intent intent = roleManager.createRequestRoleIntent(RoleManager.ROLE_DIALER);
+                    roleLauncher.launch(intent);
+                } else {
+                    Toast.makeText(this, "Aplikacja jest już domyślnym telefonem.", Toast.LENGTH_SHORT).show();
+                }
+            }
+        } else {
+            // Dla starszych wersji Androida, przenieś do ustawień
+            Intent intent = new Intent(Settings.ACTION_MANAGE_DEFAULT_APPS_SETTINGS);
+            startActivity(intent);
+            Toast.makeText(this, "Wybierz tę aplikację jako domyślną aplikację 'Telefon'", Toast.LENGTH_LONG).show();
+        }
+    }
+
 
     @Override
     protected void onDestroy() {
