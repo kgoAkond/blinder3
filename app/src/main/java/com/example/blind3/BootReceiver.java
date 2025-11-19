@@ -10,7 +10,7 @@ public class BootReceiver extends BroadcastReceiver {
     public void onReceive(Context context, Intent intent) {
         if (intent == null) return;
         if (Intent.ACTION_BOOT_COMPLETED.equals(intent.getAction())) {
-            Intent svc = new Intent(context, TimeSpeakerService.class);
+            Intent svc = new Intent(context, MainService.class);
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 context.startForegroundService(svc);
             } else {

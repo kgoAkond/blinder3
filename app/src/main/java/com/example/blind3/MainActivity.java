@@ -37,14 +37,13 @@ public class MainActivity extends AppCompatActivity {
         // Ustaw widok z pliku XML, który zawiera oba przyciski
         setContentView(R.layout.activity_main);
 
-        // Znajdź przyciski w layoucie za pomocą ich ID
         Button btnEnableAccessibility = findViewById(R.id.btnEnableAccessibility);
         Button btnSetDefaultDialer = findViewById(R.id.btnSetDefaultDialer);
 
-        // Ustaw listener dla przycisku "Włącz usługę dostępności"
         btnEnableAccessibility.setOnClickListener(v ->
                 startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
         );
+
 
         // Inicjalizacja launchera do obsługi wyniku prośby o rolę dialera
         roleLauncher = registerForActivityResult(new ActivityResultContracts.StartActivityForResult(), result -> {

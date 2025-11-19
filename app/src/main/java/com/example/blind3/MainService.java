@@ -1,5 +1,6 @@
 package com.example.blind3;
 
+import android.Manifest;
 import android.accessibilityservice.AccessibilityService;
 import android.accessibilityservice.AccessibilityServiceInfo;
 import android.content.ActivityNotFoundException;
@@ -7,15 +8,22 @@ import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.content.pm.PackageManager;
+import android.database.Cursor;
 import android.media.AudioAttributes;
 import android.media.AudioFocusRequest;
 import android.media.AudioManager;
 import android.media.SoundPool;
+import android.net.Uri;
+import android.os.BatteryManager;
 import android.os.Build;
+import android.provider.CallLog;
 import android.speech.tts.TextToSpeech;
 import android.util.Log;
 import android.view.KeyEvent;
 import android.view.accessibility.AccessibilityEvent;
+
+import androidx.core.content.ContextCompat;
 
 import com.example.blind3.model.StartActionEnum;
 
@@ -23,7 +31,7 @@ import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
 import java.util.Locale;
 
-public class TimeSpeakerService extends AccessibilityService implements TextToSpeech.OnInitListener {
+public class MainService extends AccessibilityService implements TextToSpeech.OnInitListener {
 
     private static final String TAG = "KGO";
     private static final long DEBOUNCE_MS = 200L;
@@ -114,7 +122,7 @@ public class TimeSpeakerService extends AccessibilityService implements TextToSp
     @Override
     protected boolean onKeyEvent(KeyEvent event) {
         int code = event.getKeyCode();
-
+        String text = "ready";
         if (event.getAction() == KeyEvent.ACTION_UP) {
             if (code == lastConsumedKey) {
                 lastConsumedKey = -1;
@@ -166,25 +174,30 @@ public class TimeSpeakerService extends AccessibilityService implements TextToSp
         }
 
         if (step == StartActionEnum.SAY_TIME) {
-            showMainActivity();
-            speakTimeWithKey(code);
+            text = speakTimeWithKey(code);
+            showStartActivity(text);
+
         } else if (step == StartActionEnum.SAY_DATE) {
-            showMainActivity();
-            speakDateWithKey(code);
+            text = speakDateWithKey(code);
+            showStartActivity(text);
         } else if (step == StartActionEnum.CHECK_ACTIVE) {
-            showMainActivity();
+            showStartActivity("Wszystko OK");
             playSound(robotSoundId);
         } else if (step == StartActionEnum.ASSISTANCE) {
             launchAssistant();
         } else if (step == StartActionEnum.HOT_CALL) {
             RequestCallPermissionActivity.start(this, "+48888868868");
+        } else if (step == StartActionEnum.MISSED_CALL) {
+            speakLastMissedCall();
         }
+
 
         return true;
     }
 
-    private void showMainActivity() {
-        Intent intent = new Intent(this, MainActivity.class);
+    private void showStartActivity(String text) {
+        StartActivity.setText(text);
+        Intent intent = new Intent(this, StartActivity.class);
         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK
                 | Intent.FLAG_ACTIVITY_CLEAR_TOP
                 | Intent.FLAG_ACTIVITY_SINGLE_TOP);
@@ -208,14 +221,14 @@ public class TimeSpeakerService extends AccessibilityService implements TextToSp
         }
     }
 
-    private void speakTimeWithKey(int keyCode) {
+    private String speakTimeWithKey(int keyCode) {
         lastSpokenKey = keyCode;
-        speakTime();
+        return speakTime();
     }
 
-    private void speakDateWithKey(int keyCode) {
+    private String speakDateWithKey(int keyCode) {
         lastSpokenKey = keyCode;
-        speakDate();
+        return speakDate();
     }
 
     private void playSound(int soundId) {
@@ -233,18 +246,134 @@ public class TimeSpeakerService extends AccessibilityService implements TextToSp
         }
     }
 
-    private void speakTime() {
-        if (!ready || tts == null) return;
+    private String speakTime() {
+        if (!ready || tts == null) return "...";
         String text = LocalTime.now().format(FMT);
         requestTransientAudioFocus();
         tts.speak("Godzina " + text, TextToSpeech.QUEUE_FLUSH, null, "time-utterance");
+        return text;
     }
 
-    private void speakDate() {
-        if (!ready || tts == null) return;
-        String dateText = java.time.LocalDate.now().format(DATE_FMT);
+    private String speakDate() {
+        if (!ready || tts == null) return "...";
+        String text = "Dzisiaj jest " + java.time.LocalDate.now().format(DATE_FMT);
         requestTransientAudioFocus();
-        tts.speak("Dzisiaj jest " + dateText, TextToSpeech.QUEUE_FLUSH, null, "date-utterance");
+        text += "\n" + getBatteryStatus();
+        tts.speak(text, TextToSpeech.QUEUE_FLUSH, null, "date-utterance");
+        return text;
+    }
+
+    private String getBatteryStatus() {
+        if (!ready || tts == null) return "";
+
+        IntentFilter ifilter = new IntentFilter(Intent.ACTION_BATTERY_CHANGED);
+        Intent batteryStatus = registerReceiver(null, ifilter);
+        if (batteryStatus == null) {
+            return "Nie udało się odczytać stanu baterii.";
+        }
+
+        int level = batteryStatus.getIntExtra(BatteryManager.EXTRA_LEVEL, -1);
+        int scale = batteryStatus.getIntExtra(BatteryManager.EXTRA_SCALE, -1);
+        int status = batteryStatus.getIntExtra(BatteryManager.EXTRA_STATUS, -1);
+
+        int percent = -1;
+        if (level >= 0 && scale > 0) {
+            percent = (int) (100f * level / scale);
+        }
+
+        String chargingText;
+        switch (status) {
+            case BatteryManager.BATTERY_STATUS_CHARGING:
+                chargingText = "Bateria jest ładowana.";
+                break;
+            case BatteryManager.BATTERY_STATUS_FULL:
+                chargingText = "Bateria jest naładowana.";
+                break;
+            case BatteryManager.BATTERY_STATUS_DISCHARGING:
+            case BatteryManager.BATTERY_STATUS_NOT_CHARGING:
+                chargingText = "Bateria nie jest ładowana.";
+                break;
+            default:
+                chargingText = "";
+        }
+
+        String text;
+        if (percent >= 0) {
+            text = "Poziom baterii " + percent + " procent. " + chargingText;
+        } else {
+            text = "Nie udało się obliczyć poziomu baterii. " + chargingText;
+        }
+
+        requestTransientAudioFocus();
+        return text;
+    }
+
+    private boolean hasReadCallLogPermission() {
+        return ContextCompat.checkSelfPermission(
+                this,
+                Manifest.permission.READ_CALL_LOG
+        ) == PackageManager.PERMISSION_GRANTED;
+    }
+
+    private void speakLastMissedCall() {
+        if (!ready || tts == null) return;
+
+        if (!hasReadCallLogPermission()) {
+            tts.speak("Brak zgody na odczyt historii połączeń.",
+                    TextToSpeech.QUEUE_FLUSH, null, "no-calllog-perm");
+            return;
+        }
+
+        Uri uri = CallLog.Calls.CONTENT_URI;
+
+        String[] projection = new String[] {
+                CallLog.Calls.NUMBER,
+                CallLog.Calls.CACHED_NAME,
+                CallLog.Calls.DATE,
+                CallLog.Calls.TYPE,
+                CallLog.Calls.NEW
+        };
+
+        String selection = CallLog.Calls.TYPE + "=? AND " + CallLog.Calls.NEW + "=?";
+        String[] selectionArgs = new String[] {
+                String.valueOf(CallLog.Calls.MISSED_TYPE),
+                "1"
+        };
+
+        String sortOrder = CallLog.Calls.DATE + " DESC LIMIT 1";
+
+        try (Cursor cursor = getContentResolver().query(
+                uri,
+                projection,
+                selection,
+                selectionArgs,
+                sortOrder
+        )) {
+            if (cursor != null && cursor.moveToFirst()) {
+                String number = cursor.getString(cursor.getColumnIndexOrThrow(CallLog.Calls.NUMBER));
+                String name   = cursor.getString(cursor.getColumnIndexOrThrow(CallLog.Calls.CACHED_NAME));
+
+                String who;
+                if (name != null && !name.isEmpty()) {
+                    who = name;
+                } else if (number != null && !number.isEmpty()) {
+                    who = "numer " + number;
+                } else {
+                    who = "nieznany numer";
+                }
+
+                String text = "Ostatnie nieodebrane połączenie od " + who + ".";
+                requestTransientAudioFocus();
+                tts.speak(text, TextToSpeech.QUEUE_FLUSH, null, "missed-call");
+            } else {
+                tts.speak("Brak nowych nieodebranych połączeń.",
+                        TextToSpeech.QUEUE_FLUSH, null, "no-missed-calls");
+            }
+        } catch (Exception e) {
+            Log.e("KGO", "speakLastMissedCall error", e);
+            tts.speak("Nie udało się odczytać nieodebranych połączeń.",
+                    TextToSpeech.QUEUE_FLUSH, null, "missed-call-error");
+        }
     }
 
     private void speak(String text) {

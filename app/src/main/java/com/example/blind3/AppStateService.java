@@ -21,11 +21,12 @@ public class AppStateService {
 
     private StartActionEnum processStart(int keyCode) {
         return switch (keyCode) {
-            case KeyEvent.KEYCODE_STAR -> StartActionEnum.SAY_TIME;
-            case KeyEvent.KEYCODE_6, KeyEvent.KEYCODE_NUMPAD_6 -> StartActionEnum.SAY_DATE;
-            case KeyEvent.KEYCODE_7, KeyEvent.KEYCODE_NUMPAD_7 -> StartActionEnum.CHECK_ACTIVE;
-            case KeyEvent.KEYCODE_0, KeyEvent.KEYCODE_NUMPAD_0 -> StartActionEnum.ASSISTANCE;
-            case KeyEvent.KEYCODE_5-> StartActionEnum.HOT_CALL;
+            case KeyEvent.KEYCODE_MENU -> StartActionEnum.SAY_TIME;
+            case KeyEvent.KEYCODE_BACK -> StartActionEnum.SAY_DATE;
+            case KeyEvent.KEYCODE_DPAD_CENTER -> StartActionEnum.CHECK_ACTIVE;
+            case KeyEvent.KEYCODE_STAR -> StartActionEnum.ASSISTANCE;
+            case KeyEvent.KEYCODE_5 -> StartActionEnum.HOT_CALL;
+            case KeyEvent.KEYCODE_0 -> StartActionEnum.MISSED_CALL;
             default -> StartActionEnum.EMPTY;
         };
     }
