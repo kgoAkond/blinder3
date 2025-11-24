@@ -34,7 +34,12 @@ public class StartActivity extends AppCompatActivity {
 
     public static void setText(String text) {
         if (sInstance != null) {
-            sInstance.updateText(text);
+            sInstance.runOnUiThread(new Runnable() {
+                @Override
+                public void run() {
+                    sInstance.updateText(text);
+                }
+            });
         }
     }
 

@@ -5,12 +5,12 @@ import android.telecom.Call;
 import android.telecom.InCallService;
 import android.telecom.VideoProfile;
 import android.util.Log;
+import android.widget.TextView;
 
 public class MyInCallService extends InCallService {
 
     private static final String TAG = "MyInCallService";
 
-    // statyczna referencja, żeby Activity mogła poprosić o answer()/disconnect()
     static MyInCallService sInstance;
 
     private Call currentCall;
@@ -40,12 +40,9 @@ public class MyInCallService extends InCallService {
         int state = call.getDetails().getState();
         Log.d(TAG, "onCallAdded state=" + state);
 
-        // Pierwsze wywołanie UI w zależności od stanu
         if (state == Call.STATE_RINGING) {
-            // połączenie przychodzące
             showIncomingUi();
         } else if (state == Call.STATE_DIALING || state == Call.STATE_CONNECTING) {
-            // połączenie wychodzące
             showOutgoingUi();
         }
     }
@@ -78,6 +75,14 @@ public class MyInCallService extends InCallService {
         }
     };
 
+    public static String getContactName() {
+        if (sInstance != null && sInstance.currentCall != null) {
+            return sInstance.currentCall.getDetails().getContactDisplayName();
+        } else {
+            return null;
+        }
+    }
+
     private void showIncomingUi() {
         Intent i = new Intent(this, SimpleAnswerActivity.class);
         i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
@@ -90,39 +95,43 @@ public class MyInCallService extends InCallService {
         startActivity(i);
     }
 
-    public void answerCurrentCall() {
+    public boolean answerCurrentCall() {
         if (currentCall == null) {
             Log.d(TAG, "answerCurrentCall: no current call");
-            return;
+            return false;
         }
         if (currentCall.getState() == Call.STATE_RINGING) {
             currentCall.answer(VideoProfile.STATE_AUDIO_ONLY);
             Log.d(TAG, "answerCurrentCall: answered");
+            return true;
         } else {
             Log.d(TAG, "answerCurrentCall: not ringing");
         }
+        return false;
     }
 
-    public void disconnectCurrentCall() {
+    public boolean disconnectCurrentCall() {
         if (currentCall == null) {
             Log.d(TAG, "disconnectCurrentCall: no current call");
-            return;
+            return false;
         }
         currentCall.disconnect();
         Log.d(TAG, "disconnectCurrentCall: disconnect requested");
+        return true;
     }
 
-    // statyczne helpery dla Activity
-    public static void answerRingingCallIfPossible() {
+    public static boolean answerRingingCallIfPossible() {
         if (sInstance != null) {
-            sInstance.answerCurrentCall();
+            return sInstance.answerCurrentCall();
         }
+        return false;
     }
 
-    public static void disconnectCallIfPossible() {
+    public static boolean disconnectCallIfPossible() {
         if (sInstance != null) {
-            sInstance.disconnectCurrentCall();
+            return sInstance.disconnectCurrentCall();
         }
+        return false;
     }
 
     public static String getCurrentCallAddress() {

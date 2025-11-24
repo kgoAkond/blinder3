@@ -53,10 +53,12 @@ public class MainService extends AccessibilityService implements TextToSpeech.On
     private BroadcastReceiver screenReceiver;
     private AppStateService appStateService;
 
+    static MainService sInstance;
+
     @Override
     protected void onServiceConnected() {
         super.onServiceConnected();
-
+        sInstance = this;
         AccessibilityServiceInfo info = getServiceInfo();
         if (info == null) info = new AccessibilityServiceInfo();
         info.flags = info.flags | AccessibilityServiceInfo.FLAG_REQUEST_FILTER_KEY_EVENTS;
@@ -146,11 +148,14 @@ public class MainService extends AccessibilityService implements TextToSpeech.On
         }
 
 
-        if (code == KeyEvent.KEYCODE_DPAD_CENTER) {
-            MyInCallService.answerRingingCallIfPossible();
-            return true;
-        }
         var step = appStateService.process(code);
+        if (code == KeyEvent.KEYCODE_DPAD_CENTER) {
+            if(MyInCallService.answerRingingCallIfPossible() || MyInCallService.disconnectCallIfPossible()) {
+                return true;
+            } else {
+                step = StartActionEnum.CHECK_ACTIVE;
+            }
+        }
 
         if (step == StartActionEnum.EMPTY) return false;
 
@@ -189,8 +194,9 @@ public class MainService extends AccessibilityService implements TextToSpeech.On
             RequestCallPermissionActivity.start(this, "+48888868868");
         } else if (step == StartActionEnum.MISSED_CALL) {
             speakLastMissedCall();
+        } else if (step == StartActionEnum.EMPTY) {
+            return false;
         }
-
 
         return true;
     }
@@ -376,10 +382,12 @@ public class MainService extends AccessibilityService implements TextToSpeech.On
         }
     }
 
-    private void speak(String text) {
-        if (ready && tts != null) {
-            requestTransientAudioFocus();
-            tts.speak(text, TextToSpeech.QUEUE_FLUSH, null, null);
+    public static void speak(String text) {
+        if(sInstance != null) {
+            if (sInstance.ready && sInstance.tts != null) {
+                sInstance.requestTransientAudioFocus();
+                sInstance.tts.speak(text, TextToSpeech.QUEUE_FLUSH, null, null);
+            }
         }
     }
 

@@ -3,13 +3,13 @@ package com.example.blind3;
 import android.os.Bundle;
 import android.view.View;
 import android.widget.Button;
+import android.widget.TextView;
 
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatActivity;
 
 public class SimpleAnswerActivity extends AppCompatActivity {
 
-    // prosta statyczna referencja, żeby InCallService mógł ją zamknąć
     private static SimpleAnswerActivity sInstance;
 
     @Override
@@ -35,6 +35,8 @@ public class SimpleAnswerActivity extends AppCompatActivity {
                 finish();
             }
         });
+        updateText(MyInCallService.getContactName());
+
     }
 
     @Override
@@ -44,8 +46,13 @@ public class SimpleAnswerActivity extends AppCompatActivity {
         }
         super.onDestroy();
     }
+    private void updateText(String text) {
+        TextView txt = findViewById(R.id.call_text);
+        txt.setText(text);
+        MainService.speak("Dzwoni " + text);
+    }
 
-    // wywoływane z MyInCallService, gdy rozmowa się zakończy
+
     public static void finishIfShowing() {
         if (sInstance != null) {
             sInstance.runOnUiThread(new Runnable() {
