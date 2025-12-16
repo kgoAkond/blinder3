@@ -12,7 +12,7 @@ import android.util.Log;
 public class CallStateReceiver extends BroadcastReceiver {
     private static final String TAG = "CallStateReceiver";
     private static boolean isRinging = false;
-    private static String callerInfo = null; // Przechowuje nazwę lub numer dzwoniącego
+    private static String callerInfo = null;
 
     @Override
     public void onReceive(Context context, Intent intent) {
@@ -36,7 +36,6 @@ public class CallStateReceiver extends BroadcastReceiver {
         return callerInfo;
     }
 
-    // Metoda wywoływana przez MyInCallService
     public static void updateCallerInfo(Context context, String phoneNumber) {
         if (phoneNumber == null || phoneNumber.isEmpty()) {
             callerInfo = "Nieznany numer";
@@ -52,7 +51,7 @@ public class CallStateReceiver extends BroadcastReceiver {
     private static String getContactName(Context context, String phoneNumber) {
         Uri uri = Uri.withAppendedPath(ContactsContract.PhoneLookup.CONTENT_FILTER_URI, Uri.encode(phoneNumber));
         String[] projection = new String[]{ContactsContract.PhoneLookup.DISPLAY_NAME};
-        String contactName = phoneNumber; // Domyślnie użyj numeru
+        String contactName = phoneNumber;
 
         try (Cursor cursor = context.getContentResolver().query(uri, projection, null, null, null)) {
             if (cursor != null && cursor.moveToFirst()) {

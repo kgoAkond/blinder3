@@ -34,7 +34,7 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        // Ustaw widok z pliku XML, który zawiera oba przyciski
+
         setContentView(R.layout.activity_main);
 
         Button btnEnableAccessibility = findViewById(R.id.btnEnableAccessibility);
@@ -45,7 +45,6 @@ public class MainActivity extends AppCompatActivity {
         );
 
 
-        // Inicjalizacja launchera do obsługi wyniku prośby o rolę dialera
         roleLauncher = registerForActivityResult(new ActivityResultContracts.StartActivityForResult(), result -> {
             if (result.getResultCode() == RESULT_OK) {
                 Toast.makeText(this, "Aplikacja ustawiona jako domyślny telefon.", Toast.LENGTH_SHORT).show();
@@ -54,18 +53,15 @@ public class MainActivity extends AppCompatActivity {
             }
         });
 
-        // Ustaw listener dla przycisku "Ustaw jako domyślny telefon"
         btnSetDefaultDialer.setOnClickListener(v -> requestRoleDialer());
-        // Sprawdź i poproś o niezbędne uprawnienia
         checkAndRequestPermissions();
     }
 
     private void checkAndRequestPermissions() {
-        // Lista uprawnień do sprawdzenia
         String[] permissions = new String[]{
                 Manifest.permission.READ_CONTACTS,
                 Manifest.permission.READ_PHONE_STATE,
-                Manifest.permission.CALL_PHONE // Dodane dla spójności
+                Manifest.permission.CALL_PHONE
         };
 
         List<String> listPermissionsNeeded = new ArrayList<>();
@@ -75,7 +71,6 @@ public class MainActivity extends AppCompatActivity {
             }
         }
 
-        // Jeśli są potrzebne jakieś uprawnienia, poproś o nie
         if (!listPermissionsNeeded.isEmpty()) {
             ActivityCompat.requestPermissions(this,
                     listPermissionsNeeded.toArray(new String[0]),
@@ -94,7 +89,6 @@ public class MainActivity extends AppCompatActivity {
                 }
             }
         } else {
-            // Dla starszych wersji Androida, przenieś do ustawień
             Intent intent = new Intent(Settings.ACTION_MANAGE_DEFAULT_APPS_SETTINGS);
             startActivity(intent);
             Toast.makeText(this, "Wybierz tę aplikację jako domyślną aplikację 'Telefon'", Toast.LENGTH_LONG).show();
