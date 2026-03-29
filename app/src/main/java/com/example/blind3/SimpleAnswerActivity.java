@@ -12,6 +12,17 @@ public class SimpleAnswerActivity extends AppCompatActivity {
 
     private static SimpleAnswerActivity sInstance;
 
+    public static void finishIfShowing() {
+        if (sInstance != null) {
+            sInstance.runOnUiThread(new Runnable() {
+                @Override
+                public void run() {
+                    sInstance.finish();
+                }
+            });
+        }
+    }
+
     @Override
     protected void onCreate(@Nullable Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -46,21 +57,13 @@ public class SimpleAnswerActivity extends AppCompatActivity {
         }
         super.onDestroy();
     }
+
     private void updateText(String text) {
         TextView txt = findViewById(R.id.call_text);
         txt.setText(text);
-        MainService.speak("Dzwoni " + text);
-    }
-
-
-    public static void finishIfShowing() {
-        if (sInstance != null) {
-            sInstance.runOnUiThread(new Runnable() {
-                @Override
-                public void run() {
-                    sInstance.finish();
-                }
-            });
+        var sound = MainService.getSound();
+        if (sound != null) {
+            sound.speak("Dzwoni " + text);
         }
     }
 }

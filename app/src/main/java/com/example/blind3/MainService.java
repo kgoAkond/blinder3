@@ -10,10 +10,6 @@ import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.pm.PackageManager;
 import android.database.Cursor;
-import android.media.AudioAttributes;
-import android.media.AudioFocusRequest;
-import android.media.AudioManager;
-import android.media.SoundPool;
 import android.net.Uri;
 import android.os.BatteryManager;
 import android.os.Build;
@@ -31,29 +27,22 @@ import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
 import java.util.Locale;
 
-public class MainService extends AccessibilityService implements TextToSpeech.OnInitListener {
+public class MainService extends AccessibilityService {
 
     private static final String TAG = "KGO";
     private static final long DEBOUNCE_MS = 200L;
     private static final Locale LOCALE_PL = new Locale("pl", "PL");
     private static final DateTimeFormatter FMT = DateTimeFormatter.ofPattern("HH:mm");
     private static final DateTimeFormatter DATE_FMT = DateTimeFormatter.ofPattern("EEEE, d MMMM yyyy", LOCALE_PL);
-    private TextToSpeech tts;
-    private boolean ready = false;
+    static MainService sInstance;
+    private SoundManager sound;
     private long lastHandledAt = 0L;
     private int lastConsumedKey = -1;
-    private boolean ttsSpeaking = false;
     private int lastSpokenKey = -1;
-    private AudioManager audioManager;
-    private AudioFocusRequest audioFocusReq;
-    private SoundPool soundPool;
-    private int robotSoundId = 0;
-    private int beepSoundId = 0;
-    private boolean robotLoaded = false;
     private BroadcastReceiver screenReceiver;
     private AppStateService appStateService;
+    private Contacts contacts;
 
-    static MainService sInstance;
 
     @Override
     protected void onServiceConnected() {
@@ -63,20 +52,7 @@ public class MainService extends AccessibilityService implements TextToSpeech.On
         if (info == null) info = new AccessibilityServiceInfo();
         info.flags = info.flags | AccessibilityServiceInfo.FLAG_REQUEST_FILTER_KEY_EVENTS;
         setServiceInfo(info);
-        audioManager = getSystemService(AudioManager.class);
-        AudioAttributes spAttrs = new AudioAttributes.Builder()
-                .setUsage(AudioAttributes.USAGE_ASSISTANCE_SONIFICATION)
-                .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
-                .build();
-        soundPool = new SoundPool.Builder()
-                .setMaxStreams(1)
-                .setAudioAttributes(spAttrs)
-                .build();
-        soundPool.setOnLoadCompleteListener((sp, sampleId, status) -> {
-            if (status == 0 && sampleId == robotSoundId) robotLoaded = true;
-        });
-        robotSoundId = soundPool.load(this, R.raw.robot, 1);
-        beepSoundId = soundPool.load(this, R.raw.beep, 1);
+
 
         IntentFilter filter = new IntentFilter(Intent.ACTION_SCREEN_ON);
         screenReceiver = new BroadcastReceiver() {
@@ -84,42 +60,20 @@ public class MainService extends AccessibilityService implements TextToSpeech.On
             public void onReceive(Context context, Intent intent) {
                 if (Intent.ACTION_SCREEN_ON.equals(intent.getAction())) {
                     Log.d("KGO", "ACTION_SCREEN_ON -> playRobot()");
-                    playSound(robotSoundId);
+                    sound.playSound();
                 }
             }
         };
         registerReceiver(screenReceiver, filter);
         appStateService = new AppStateService();
-        tts = new TextToSpeech(this, this);
+        sound = new SoundManager(this);
+        contacts = new Contacts();
     }
-
-    private void requestTransientAudioFocus() {
-        if (audioManager == null) return;
-
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            AudioAttributes attrs = new AudioAttributes.Builder()
-                    .setUsage(AudioAttributes.USAGE_ASSISTANCE_ACCESSIBILITY)
-                    .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
-                    .build();
-            audioFocusReq = new AudioFocusRequest.Builder(
-                    AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK)
-                    .setAudioAttributes(attrs)
-                    .build();
-            audioManager.requestAudioFocus(audioFocusReq);
-        } else {
-            audioManager.requestAudioFocus(
-                    null, AudioManager.STREAM_MUSIC,
-                    AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK
-            );
-        }
-    }
-
 
     @Override
     public void onAccessibilityEvent(AccessibilityEvent event) {
         Log.d("KGO", "event: " + event.toString());
     }
-
 
     @Override
     protected boolean onKeyEvent(KeyEvent event) {
@@ -140,9 +94,9 @@ public class MainService extends AccessibilityService implements TextToSpeech.On
             String caller = CallStateReceiver.getCallerInfo();
             if (caller != null && !caller.isEmpty()) {
                 Log.d("TimeSpeakerService", "Key 2 pressed. Announcing caller: " + caller);
-                speak("Dzwoni " + caller);
+                sound.speak("Dzwoni " + caller);
             } else {
-                speak("Nieznany numer");
+                sound.speak("Nieznany numer");
             }
             return true;
         }
@@ -150,7 +104,7 @@ public class MainService extends AccessibilityService implements TextToSpeech.On
 
         var step = appStateService.process(code);
         if (code == KeyEvent.KEYCODE_DPAD_CENTER) {
-            if(MyInCallService.answerRingingCallIfPossible() || MyInCallService.disconnectCallIfPossible()) {
+            if (MyInCallService.answerRingingCallIfPossible() || MyInCallService.disconnectCallIfPossible()) {
                 return true;
             } else {
                 step = StartActionEnum.CHECK_ACTIVE;
@@ -159,7 +113,7 @@ public class MainService extends AccessibilityService implements TextToSpeech.On
 
         if (step == StartActionEnum.EMPTY) return false;
 
-        boolean isToggleMute = ttsSpeaking && (code == lastSpokenKey);
+        boolean isToggleMute = sound.ttsSpeaking() && (code == lastSpokenKey);
 
         long now = System.currentTimeMillis();
 
@@ -169,12 +123,13 @@ public class MainService extends AccessibilityService implements TextToSpeech.On
         lastConsumedKey = code;
 
         Log.d("KGO", "Key code: " + code +
-                ", ttsSpeaking=" + ttsSpeaking +
+                ", ttsSpeaking=" + sound.ttsSpeaking() +
                 ", lastSpokenKey=" + lastSpokenKey +
                 ", isToggleMute=" + isToggleMute);
 
         if (isToggleMute) {
-            muteTts();
+            sound.muteTts();
+            lastSpokenKey = -1;
             return true;
         }
 
@@ -187,17 +142,16 @@ public class MainService extends AccessibilityService implements TextToSpeech.On
             showStartActivity(text);
         } else if (step == StartActionEnum.CHECK_ACTIVE) {
             showStartActivity("Wszystko OK");
-            playSound(robotSoundId);
+            sound.playSound();
         } else if (step == StartActionEnum.ASSISTANCE) {
             launchAssistant();
-        } else if (step == StartActionEnum.HOT_CALL) {
-            RequestCallPermissionActivity.start(this, "+48888868868");
+        } else if (step == StartActionEnum.HOT_1) {
+            RequestCallPermissionActivity.start(this, Contacts.contacts.get(0).number());
         } else if (step == StartActionEnum.MISSED_CALL) {
             speakLastMissedCall();
         } else if (step == StartActionEnum.EMPTY) {
             return false;
         }
-
         return true;
     }
 
@@ -210,23 +164,6 @@ public class MainService extends AccessibilityService implements TextToSpeech.On
         startActivity(intent);
     }
 
-    private void muteTts() {
-        if (tts != null) {
-            tts.stop();
-        }
-        ttsSpeaking = false;
-        lastSpokenKey = -1;
-
-        if (audioManager != null) {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && audioFocusReq != null) {
-                audioManager.abandonAudioFocusRequest(audioFocusReq);
-                audioFocusReq = null;
-            } else {
-                audioManager.abandonAudioFocus(null);
-            }
-        }
-    }
-
     private String speakTimeWithKey(int keyCode) {
         lastSpokenKey = keyCode;
         return speakTime();
@@ -237,41 +174,20 @@ public class MainService extends AccessibilityService implements TextToSpeech.On
         return speakDate();
     }
 
-    private void playSound(int soundId) {
-        float volume = 0.2f;
-        if (soundPool == null || soundId == 0) return;
-
-        requestTransientAudioFocus();
-
-        if (robotLoaded) {
-            soundPool.play(soundId, volume, volume, 1, 0, 1f);
-        } else {
-            new android.os.Handler(getMainLooper()).postDelayed(() -> {
-                if (robotLoaded) soundPool.play(soundId, volume, volume, 1, 0, 1f);
-            }, 120);
-        }
-    }
-
     private String speakTime() {
-        if (!ready || tts == null) return "...";
         String text = LocalTime.now().format(FMT);
-        requestTransientAudioFocus();
-        tts.speak("Godzina " + text, TextToSpeech.QUEUE_FLUSH, null, "time-utterance");
+        sound.speakTime("Godzina " + text);
         return text;
     }
 
     private String speakDate() {
-        if (!ready || tts == null) return "...";
         String text = "Dzisiaj jest " + java.time.LocalDate.now().format(DATE_FMT);
-        requestTransientAudioFocus();
         text += "\n" + getBatteryStatus();
-        tts.speak(text, TextToSpeech.QUEUE_FLUSH, null, "date-utterance");
+        sound.speakDate(text);
         return text;
     }
 
     private String getBatteryStatus() {
-        if (!ready || tts == null) return "";
-
         IntentFilter ifilter = new IntentFilter(Intent.ACTION_BATTERY_CHANGED);
         Intent batteryStatus = registerReceiver(null, ifilter);
         if (batteryStatus == null) {
@@ -309,8 +225,6 @@ public class MainService extends AccessibilityService implements TextToSpeech.On
         } else {
             text = "Nie udało się obliczyć poziomu baterii. " + chargingText;
         }
-
-        requestTransientAudioFocus();
         return text;
     }
 
@@ -322,17 +236,14 @@ public class MainService extends AccessibilityService implements TextToSpeech.On
     }
 
     private void speakLastMissedCall() {
-        if (!ready || tts == null) return;
-
         if (!hasReadCallLogPermission()) {
-            tts.speak("Brak zgody na odczyt historii połączeń.",
-                    TextToSpeech.QUEUE_FLUSH, null, "no-calllog-perm");
+            sound.speak("Brak zgody na odczyt historii połączeń.");
             return;
         }
 
         Uri uri = CallLog.Calls.CONTENT_URI;
 
-        String[] projection = new String[] {
+        String[] projection = new String[]{
                 CallLog.Calls.NUMBER,
                 CallLog.Calls.CACHED_NAME,
                 CallLog.Calls.DATE,
@@ -341,7 +252,7 @@ public class MainService extends AccessibilityService implements TextToSpeech.On
         };
 
         String selection = CallLog.Calls.TYPE + "=? AND " + CallLog.Calls.NEW + "=?";
-        String[] selectionArgs = new String[] {
+        String[] selectionArgs = new String[]{
                 String.valueOf(CallLog.Calls.MISSED_TYPE),
                 "1"
         };
@@ -357,7 +268,7 @@ public class MainService extends AccessibilityService implements TextToSpeech.On
         )) {
             if (cursor != null && cursor.moveToFirst()) {
                 String number = cursor.getString(cursor.getColumnIndexOrThrow(CallLog.Calls.NUMBER));
-                String name   = cursor.getString(cursor.getColumnIndexOrThrow(CallLog.Calls.CACHED_NAME));
+                String name = cursor.getString(cursor.getColumnIndexOrThrow(CallLog.Calls.CACHED_NAME));
 
                 String who;
                 if (name != null && !name.isEmpty()) {
@@ -369,31 +280,18 @@ public class MainService extends AccessibilityService implements TextToSpeech.On
                 }
 
                 String text = "Ostatnie nieodebrane połączenie od " + who + ".";
-                requestTransientAudioFocus();
-                tts.speak(text, TextToSpeech.QUEUE_FLUSH, null, "missed-call");
+                sound.speak(text);
             } else {
-                tts.speak("Brak nowych nieodebranych połączeń.",
-                        TextToSpeech.QUEUE_FLUSH, null, "no-missed-calls");
+                sound.speak("Brak nowych nieodebranych połączeń.");
             }
         } catch (Exception e) {
             Log.e("KGO", "speakLastMissedCall error", e);
-            tts.speak("Nie udało się odczytać nieodebranych połączeń.",
-                    TextToSpeech.QUEUE_FLUSH, null, "missed-call-error");
+            sound.speak("Nie udało się odczytać nieodebranych połączeń.");
         }
     }
-
-    public static void speak(String text) {
-        if(sInstance != null) {
-            if (sInstance.ready && sInstance.tts != null) {
-                sInstance.requestTransientAudioFocus();
-                sInstance.tts.speak(text, TextToSpeech.QUEUE_FLUSH, null, null);
-            }
-        }
-    }
-
 
     private void launchAssistant() {
-        playSound(beepSoundId);
+        sound.playSound();
         try {
             Intent intent;
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
@@ -417,45 +315,21 @@ public class MainService extends AccessibilityService implements TextToSpeech.On
         }
     }
 
-    @Override
-    public void onInit(int status) {
-        ready = (status == TextToSpeech.SUCCESS);
-        if (ready && tts != null) {
-            tts.setLanguage(LOCALE_PL);
-            tts.setOnUtteranceProgressListener(new android.speech.tts.UtteranceProgressListener() {
-                @Override
-                public void onStart(String utteranceId) {
-                    ttsSpeaking = true;
-                }
-
-                @Override
-                public void onDone(String utteranceId) {
-                    ttsSpeaking = false;
-                }
-
-                @Override
-                public void onError(String utteranceId) {
-                    ttsSpeaking = false;
-                }
-            });
+    public static SoundManager getSound() {
+        if(sInstance != null) {
+            return sInstance.sound;
         }
+        return null;
     }
 
     @Override
     public void onInterrupt() {
-        if (tts != null) tts.stop();
+        sound.muteTts();
     }
 
     @Override
     public void onDestroy() {
-        if (tts != null) {
-            tts.stop();
-            tts.shutdown();
-        }
-        if (soundPool != null) {
-            soundPool.release();
-            soundPool = null;
-        }
+        sound.shutdown();;
         super.onDestroy();
     }
 }
