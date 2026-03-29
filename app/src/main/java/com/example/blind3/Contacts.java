@@ -35,7 +35,25 @@ public class Contacts {
     private long lastSelectedTime = -1;
 
 
-    public Contact getContact(int key) {
+    public Contact getSelectedContact() {
+        checkIfSelectedTimeouted();
+        return selectedContact;
+    }
+
+    private void checkIfSelectedTimeouted() {
+        if(selectedContact != null && System.currentTimeMillis() - lastSelectedTime > 5000) {
+            selectedContact = null;
+            state = 0;
+            lastSelectedTime = System.currentTimeMillis();
+        }
+    }
+
+    public Contact selectContact(int key) {
+        return selectContact(key, null);
+    }
+
+    public Contact selectContact(int key, SoundManager sound) {
+        checkIfSelectedTimeouted();
         if (lastKey != key) {
             state = 0;
         }
@@ -43,6 +61,9 @@ public class Contacts {
         var contactsKey = getContacts(key);
         if (contactsKey.isEmpty()) return null;
         selectedContact = contactsKey.get(state % contactsKey.size());
+        if (sound != null) {
+            sound.speak(selectedContact.name());
+        }
         lastSelectedTime = System.currentTimeMillis();
         state++;
         return selectedContact;

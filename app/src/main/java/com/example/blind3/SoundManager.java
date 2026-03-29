@@ -14,7 +14,6 @@ import java.util.Locale;
 
 public class SoundManager {
 
-    private final Context context;
     private final AudioManager audioManager;
     private SoundPool soundPool;
     private TextToSpeech tts;
@@ -28,7 +27,6 @@ public class SoundManager {
     private final Locale LOCALE_PL = new Locale("pl", "PL");
 
     public SoundManager(Context context) {
-        this.context = context;
         this.audioManager = (AudioManager) context.getSystemService(Context.AUDIO_SERVICE);
 
         AudioAttributes spAttrs = new AudioAttributes.Builder()

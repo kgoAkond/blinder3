@@ -14,7 +14,6 @@ import android.net.Uri;
 import android.os.BatteryManager;
 import android.os.Build;
 import android.provider.CallLog;
-import android.speech.tts.TextToSpeech;
 import android.util.Log;
 import android.view.KeyEvent;
 import android.view.accessibility.AccessibilityEvent;
@@ -43,6 +42,12 @@ public class MainService extends AccessibilityService {
     private AppStateService appStateService;
     private Contacts contacts;
 
+    public static SoundManager getSound() {
+        if (sInstance != null) {
+            return sInstance.sound;
+        }
+        return null;
+    }
 
     @Override
     protected void onServiceConnected() {
@@ -141,18 +146,68 @@ public class MainService extends AccessibilityService {
             text = speakDateWithKey(code);
             showStartActivity(text);
         } else if (step == StartActionEnum.CHECK_ACTIVE) {
-            showStartActivity("Wszystko OK");
-            sound.playSound();
+            handleActiveAction();
+
         } else if (step == StartActionEnum.ASSISTANCE) {
             launchAssistant();
-        } else if (step == StartActionEnum.HOT_1) {
-            RequestCallPermissionActivity.start(this, Contacts.contacts.get(0).number());
+        } else if (isHot(step)) {
+            handleHots(step);
         } else if (step == StartActionEnum.MISSED_CALL) {
             speakLastMissedCall();
         } else if (step == StartActionEnum.EMPTY) {
             return false;
         }
         return true;
+    }
+
+    private boolean isHot(StartActionEnum act) {
+        return switch (act) {
+            case HOT_1, HOT_2, HOT_3, HOT_4, HOT_5, HOT_6, HOT_7, HOT_8, HOT_9 -> true;
+            default -> false;
+        };
+    }
+
+    private void handleHots(StartActionEnum act) {
+        switch (act) {
+            case HOT_1:
+                contacts.selectContact(1, sound);
+                break;
+            case HOT_2:
+                contacts.selectContact(2, sound);
+                break;
+            case HOT_3:
+                contacts.selectContact(3, sound);
+                break;
+            case HOT_4:
+                contacts.selectContact(4, sound);
+                break;
+            case HOT_5:
+                contacts.selectContact(5, sound);
+                break;
+            case HOT_6:
+                contacts.selectContact(6, sound);
+                break;
+            case HOT_7:
+                contacts.selectContact(7, sound);
+                break;
+            case HOT_8:
+                contacts.selectContact(8, sound);
+                break;
+            case HOT_9:
+                contacts.selectContact(9, sound);
+                break;
+        }
+    }
+
+    private void handleActiveAction() {
+        var contact = contacts.getSelectedContact();
+        if (contact == null) {
+            showStartActivity("Wszystko OK");
+            sound.playSound();
+        } else {
+            showStartActivity(contact.name());
+            RequestCallPermissionActivity.start(this, contact.number());
+        }
     }
 
     private void showStartActivity(String text) {
@@ -315,13 +370,6 @@ public class MainService extends AccessibilityService {
         }
     }
 
-    public static SoundManager getSound() {
-        if(sInstance != null) {
-            return sInstance.sound;
-        }
-        return null;
-    }
-
     @Override
     public void onInterrupt() {
         sound.muteTts();
@@ -329,7 +377,8 @@ public class MainService extends AccessibilityService {
 
     @Override
     public void onDestroy() {
-        sound.shutdown();;
+        sound.shutdown();
+        ;
         super.onDestroy();
     }
 }
