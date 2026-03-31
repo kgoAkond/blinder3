@@ -94,7 +94,7 @@ public class MainService extends AccessibilityService {
 
         if (event.getAction() != KeyEvent.ACTION_DOWN) return false;
         if (event.getRepeatCount() > 0) return false;
-
+        //Log.d("UWAGA", "code: " + code);
         if (CallStateReceiver.isRinging() && code == KeyEvent.KEYCODE_2) {
             String caller = CallStateReceiver.getCallerInfo();
             if (caller != null && !caller.isEmpty()) {
@@ -127,11 +127,6 @@ public class MainService extends AccessibilityService {
         lastHandledAt = now;
         lastConsumedKey = code;
 
-        Log.d("KGO", "Key code: " + code +
-                ", ttsSpeaking=" + sound.ttsSpeaking() +
-                ", lastSpokenKey=" + lastSpokenKey +
-                ", isToggleMute=" + isToggleMute);
-
         if (isToggleMute) {
             sound.muteTts();
             lastSpokenKey = -1;
@@ -149,11 +144,15 @@ public class MainService extends AccessibilityService {
             handleActiveAction();
 
         } else if (step == StartActionEnum.ASSISTANCE) {
+            sound.muteTts();
             launchAssistant();
+            return true;
         } else if (isHot(step)) {
             handleHots(step);
         } else if (step == StartActionEnum.MISSED_CALL) {
             speakLastMissedCall();
+        } else if (step == StartActionEnum.TOGGLE_SPEAKER) {
+            MyInCallService.toggleSpeaker();
         } else if (step == StartActionEnum.EMPTY) {
             return false;
         }
@@ -168,42 +167,28 @@ public class MainService extends AccessibilityService {
     }
 
     private void handleHots(StartActionEnum act) {
-        switch (act) {
-            case HOT_1:
-                contacts.selectContact(1, sound);
-                break;
-            case HOT_2:
-                contacts.selectContact(2, sound);
-                break;
-            case HOT_3:
-                contacts.selectContact(3, sound);
-                break;
-            case HOT_4:
-                contacts.selectContact(4, sound);
-                break;
-            case HOT_5:
-                contacts.selectContact(5, sound);
-                break;
-            case HOT_6:
-                contacts.selectContact(6, sound);
-                break;
-            case HOT_7:
-                contacts.selectContact(7, sound);
-                break;
-            case HOT_8:
-                contacts.selectContact(8, sound);
-                break;
-            case HOT_9:
-                contacts.selectContact(9, sound);
-                break;
+        var c = switch (act) {
+            case HOT_1 -> contacts.selectContact(1, sound);
+            case HOT_2 -> contacts.selectContact(2, sound);
+            case HOT_3 -> contacts.selectContact(3, sound);
+            case HOT_4 -> contacts.selectContact(4, sound);
+            case HOT_5 -> contacts.selectContact(5, sound);
+            case HOT_6 -> contacts.selectContact(6, sound);
+            case HOT_7 -> contacts.selectContact(7, sound);
+            case HOT_8 -> contacts.selectContact(8, sound);
+            case HOT_9 -> contacts.selectContact(9, sound);
+            default -> null;
+        };
+        if (c != null) {
+            showStartActivity("Zadzwoń do " + c.name());
         }
     }
 
     private void handleActiveAction() {
         var contact = contacts.getSelectedContact();
         if (contact == null) {
-            showStartActivity("Wszystko OK");
-            sound.playSound();
+            showStartActivity("Wybierz kontakt");
+            sound.speak("Wybierz kontakt");
         } else {
             showStartActivity(contact.name());
             RequestCallPermissionActivity.start(this, contact.number());
@@ -301,7 +286,7 @@ public class MainService extends AccessibilityService {
         String[] projection = new String[]{
                 CallLog.Calls.NUMBER,
                 CallLog.Calls.CACHED_NAME,
-                CallLog.Calls.DATE,
+                CallLog.Calls.DATE,    // Dodano datę
                 CallLog.Calls.TYPE,
                 CallLog.Calls.NEW
         };
@@ -324,6 +309,14 @@ public class MainService extends AccessibilityService {
             if (cursor != null && cursor.moveToFirst()) {
                 String number = cursor.getString(cursor.getColumnIndexOrThrow(CallLog.Calls.NUMBER));
                 String name = cursor.getString(cursor.getColumnIndexOrThrow(CallLog.Calls.CACHED_NAME));
+                long dateMs = cursor.getLong(cursor.getColumnIndexOrThrow(CallLog.Calls.DATE)); // Pobranie czasu w ms
+
+                // Formatowanie czasu (np. "14:30")
+                java.text.SimpleDateFormat timeFormat = new java.text.SimpleDateFormat("HH:mm", LOCALE_PL);
+                String timeText = timeFormat.format(new java.util.Date(dateMs));
+
+                // Opcjonalnie: sprawdzenie czy to dzisiaj, czy wczoraj
+                String dayText = android.text.format.DateUtils.isToday(dateMs) ? "dzisiaj" : "wcześniej";
 
                 String who;
                 if (name != null && !name.isEmpty()) {
@@ -334,7 +327,10 @@ public class MainService extends AccessibilityService {
                     who = "nieznany numer";
                 }
 
-                String text = "Ostatnie nieodebrane połączenie od " + who + ".";
+                // Budowa pełnego komunikatu
+                String text = "Ostatnie nieodebrane połączenie od " + who +
+                        ", o godzinie " + timeText + " " + dayText + ".";
+
                 sound.speak(text);
             } else {
                 sound.speak("Brak nowych nieodebranych połączeń.");

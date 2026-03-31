@@ -2,6 +2,7 @@ package com.example.blind3;
 
 import android.content.Intent;
 import android.telecom.Call;
+import android.telecom.Call.Details;
 import android.telecom.InCallService;
 import android.telecom.VideoProfile;
 import android.util.Log;
@@ -142,5 +143,18 @@ public class MyInCallService extends InCallService {
             }
         }
         return null;
+    }
+
+    public static void toggleSpeaker() {
+        if (sInstance != null) {
+            android.telecom.CallAudioState state = sInstance.getCallAudioState();
+            if (state != null) {
+                if (state.getRoute() == android.telecom.CallAudioState.ROUTE_SPEAKER) {
+                    sInstance.setAudioRoute(android.telecom.CallAudioState.ROUTE_WIRED_OR_EARPIECE);
+                } else {
+                    sInstance.setAudioRoute(android.telecom.CallAudioState.ROUTE_SPEAKER);
+                }
+            }
+        }
     }
 }
