@@ -24,6 +24,7 @@ public class SoundManager {
     public int robotSoundId = 0;
     public int beepSoundId = 0;
     private AudioFocusRequest audioFocusReq;
+    private Runnable postSpeakAction;
     private final Locale LOCALE_PL = new Locale("pl", "PL");
 
     public SoundManager(Context context) {
@@ -73,6 +74,10 @@ public class SoundManager {
                     public void onDone(String utteranceId) {
                         ttsSpeaking = false;
                         abandonFocus(); // Oddaj focus po zakończeniu mówienia
+                        if (postSpeakAction != null) {
+                            new Handler(Looper.getMainLooper()).post(postSpeakAction);
+                            postSpeakAction = null;
+                        }
                     }
 
                     @Override
@@ -83,6 +88,13 @@ public class SoundManager {
                 });
             }
         });
+    }
+
+    public void speak(String text, Runnable onFinish) {
+        if (!ready || tts == null) return;
+        this.postSpeakAction = onFinish;
+        requestTransientAudioFocus();
+        tts.speak(text, TextToSpeech.QUEUE_FLUSH, null, "general-utterance");
     }
 
     public void speak(String text) {

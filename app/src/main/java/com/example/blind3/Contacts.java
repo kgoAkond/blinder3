@@ -19,20 +19,29 @@ public class Contacts {
             new Contact("Magda Konopko", "606301411", 4, 1),
             new Contact("Jasia Brenienek", "664250942", 5, 0),
             new Contact("Przychodnia Smolec", "713111811", 5, 1),
-            new Contact("Ewa Górska", "537682266", 6, 0),
+            //new Contact("Ewa Górska", "537682266", 6, 0),
             new Contact("Tadeusz Pióro", "784184048", 6, 1),
             new Contact("Irek", "577081762", 7, 0),
             new Contact("Tymon Godzwoń", "693565095", 7, 1),
             new Contact("Jasia Pańczyk", "691519471", 8, 0),
             new Contact("Weronika", "665811500", 8, 1),
             new Contact("Jurek Praca", "661406461", 9, 0),
-            new Contact("Wito", "518730114", 9, 1)
+            new Contact("Wito", "518730114", 9, 1),
+            new Contact("112", "112", 9, 1)
     );
-
+    private final static long EXPIRED_TIME = 10000;
     private int state = 0;
     private int lastKey = -1;
     private Contact selectedContact = null;
     private long lastSelectedTime = -1;
+
+    public static String findName(String number) {
+        return contacts.stream()
+                .filter(c -> c.number().equals(number))
+                .findFirst()
+                .map(Contact::name)
+                .orElse(null);
+    }
 
 
     public Contact getSelectedContact() {
@@ -41,7 +50,7 @@ public class Contacts {
     }
 
     private void checkIfSelectedTimeouted() {
-        if(selectedContact != null && System.currentTimeMillis() - lastSelectedTime > 5000) {
+        if (selectedContact != null && System.currentTimeMillis() - lastSelectedTime > EXPIRED_TIME) {
             selectedContact = null;
             state = 0;
             lastSelectedTime = System.currentTimeMillis();

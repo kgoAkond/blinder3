@@ -33,7 +33,7 @@ public class AppStateService {
             case KeyEvent.KEYCODE_6 -> StartActionEnum.HOT_6;
             case KeyEvent.KEYCODE_7 -> StartActionEnum.HOT_7;
             case KeyEvent.KEYCODE_8 -> StartActionEnum.HOT_8;
-            case KeyEvent.KEYCODE_9 -> StartActionEnum.TOGGLE_SPEAKER;
+            case KeyEvent.KEYCODE_9 -> StartActionEnum.HOT_9;
             case KeyEvent.KEYCODE_0 -> StartActionEnum.MISSED_CALL;
             default -> StartActionEnum.EMPTY;
         };

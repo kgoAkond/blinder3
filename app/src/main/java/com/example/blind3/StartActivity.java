@@ -1,7 +1,6 @@
 package com.example.blind3;
 
 import android.os.Bundle;
-import android.widget.Button;
 import android.widget.TextView;
 
 import androidx.annotation.Nullable;
@@ -10,6 +9,17 @@ import androidx.appcompat.app.AppCompatActivity;
 public class StartActivity extends AppCompatActivity {
 
     private static StartActivity sInstance;
+
+    public static void setText(String text) {
+        if (sInstance != null) {
+            sInstance.runOnUiThread(new Runnable() {
+                @Override
+                public void run() {
+                    sInstance.updateText(text);
+                }
+            });
+        }
+    }
 
     @Override
     protected void onCreate(@Nullable Bundle savedInstanceState) {
@@ -30,17 +40,6 @@ public class StartActivity extends AppCompatActivity {
     private void updateText(String text) {
         TextView txt = findViewById(R.id.star_text);
         txt.setText(text);
-    }
-
-    public static void setText(String text) {
-        if (sInstance != null) {
-            sInstance.runOnUiThread(new Runnable() {
-                @Override
-                public void run() {
-                    sInstance.updateText(text);
-                }
-            });
-        }
     }
 
 }

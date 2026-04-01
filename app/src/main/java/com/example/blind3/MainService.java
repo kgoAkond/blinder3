@@ -14,12 +14,15 @@ import android.net.Uri;
 import android.os.BatteryManager;
 import android.os.Build;
 import android.provider.CallLog;
+import android.telecom.Call;
 import android.util.Log;
 import android.view.KeyEvent;
 import android.view.accessibility.AccessibilityEvent;
 
 import androidx.core.content.ContextCompat;
 
+import com.example.blind3.features.BatteryInfo;
+import com.example.blind3.features.LastCalls;
 import com.example.blind3.model.StartActionEnum;
 
 import java.time.LocalTime;
@@ -41,6 +44,7 @@ public class MainService extends AccessibilityService {
     private BroadcastReceiver screenReceiver;
     private AppStateService appStateService;
     private Contacts contacts;
+    private static Call ringingCall = null;
 
     public static SoundManager getSound() {
         if (sInstance != null) {
@@ -77,7 +81,7 @@ public class MainService extends AccessibilityService {
 
     @Override
     public void onAccessibilityEvent(AccessibilityEvent event) {
-        Log.d("KGO", "event: " + event.toString());
+
     }
 
     @Override
@@ -94,9 +98,10 @@ public class MainService extends AccessibilityService {
 
         if (event.getAction() != KeyEvent.ACTION_DOWN) return false;
         if (event.getRepeatCount() > 0) return false;
-        //Log.d("UWAGA", "code: " + code);
-        if (CallStateReceiver.isRinging() && code == KeyEvent.KEYCODE_2) {
-            String caller = CallStateReceiver.getCallerInfo();
+        Log.d("KGO", "code: " + code + " ringing " + MyInCallService.getCallState() + " name " + MyInCallService.getContactName());
+
+        if (MyInCallService.getCallState() == Call.STATE_RINGING && code != KeyEvent.KEYCODE_DPAD_CENTER) {
+            String caller = MyInCallService.getContactName();
             if (caller != null && !caller.isEmpty()) {
                 Log.d("TimeSpeakerService", "Key 2 pressed. Announcing caller: " + caller);
                 sound.speak("Dzwoni " + caller);
@@ -106,6 +111,10 @@ public class MainService extends AccessibilityService {
             return true;
         }
 
+        if (MyInCallService.getCallState() == Call.STATE_ACTIVE && code != KeyEvent.KEYCODE_DPAD_CENTER) {
+            MyInCallService.toggleSpeaker();
+            return true;
+        }
 
         var step = appStateService.process(code);
         if (code == KeyEvent.KEYCODE_DPAD_CENTER) {
@@ -134,11 +143,13 @@ public class MainService extends AccessibilityService {
         }
 
         if (step == StartActionEnum.SAY_TIME) {
-            text = speakTimeWithKey(code);
+            lastSpokenKey = code;
+            text = speakTime();
             showStartActivity(text);
 
         } else if (step == StartActionEnum.SAY_DATE) {
-            text = speakDateWithKey(code);
+            lastSpokenKey = code;
+            text = speakDate();
             showStartActivity(text);
         } else if (step == StartActionEnum.CHECK_ACTIVE) {
             handleActiveAction();
@@ -150,9 +161,8 @@ public class MainService extends AccessibilityService {
         } else if (isHot(step)) {
             handleHots(step);
         } else if (step == StartActionEnum.MISSED_CALL) {
+            lastSpokenKey = code;
             speakLastMissedCall();
-        } else if (step == StartActionEnum.TOGGLE_SPEAKER) {
-            MyInCallService.toggleSpeaker();
         } else if (step == StartActionEnum.EMPTY) {
             return false;
         }
@@ -191,7 +201,7 @@ public class MainService extends AccessibilityService {
             sound.speak("Wybierz kontakt");
         } else {
             showStartActivity(contact.name());
-            RequestCallPermissionActivity.start(this, contact.number());
+            sound.speak("Dzwonię do " + contact.name(), () -> RequestCallPermissionActivity.start(this, contact.number()));
         }
     }
 
@@ -204,16 +214,6 @@ public class MainService extends AccessibilityService {
         startActivity(intent);
     }
 
-    private String speakTimeWithKey(int keyCode) {
-        lastSpokenKey = keyCode;
-        return speakTime();
-    }
-
-    private String speakDateWithKey(int keyCode) {
-        lastSpokenKey = keyCode;
-        return speakDate();
-    }
-
     private String speakTime() {
         String text = LocalTime.now().format(FMT);
         sound.speakTime("Godzina " + text);
@@ -222,49 +222,8 @@ public class MainService extends AccessibilityService {
 
     private String speakDate() {
         String text = "Dzisiaj jest " + java.time.LocalDate.now().format(DATE_FMT);
-        text += "\n" + getBatteryStatus();
+        text += "\n" + BatteryInfo.getBatteryStatus(this);
         sound.speakDate(text);
-        return text;
-    }
-
-    private String getBatteryStatus() {
-        IntentFilter ifilter = new IntentFilter(Intent.ACTION_BATTERY_CHANGED);
-        Intent batteryStatus = registerReceiver(null, ifilter);
-        if (batteryStatus == null) {
-            return "Nie udało się odczytać stanu baterii.";
-        }
-
-        int level = batteryStatus.getIntExtra(BatteryManager.EXTRA_LEVEL, -1);
-        int scale = batteryStatus.getIntExtra(BatteryManager.EXTRA_SCALE, -1);
-        int status = batteryStatus.getIntExtra(BatteryManager.EXTRA_STATUS, -1);
-
-        int percent = -1;
-        if (level >= 0 && scale > 0) {
-            percent = (int) (100f * level / scale);
-        }
-
-        String chargingText;
-        switch (status) {
-            case BatteryManager.BATTERY_STATUS_CHARGING:
-                chargingText = "Bateria jest ładowana.";
-                break;
-            case BatteryManager.BATTERY_STATUS_FULL:
-                chargingText = "Bateria jest naładowana.";
-                break;
-            case BatteryManager.BATTERY_STATUS_DISCHARGING:
-            case BatteryManager.BATTERY_STATUS_NOT_CHARGING:
-                chargingText = "Bateria nie jest ładowana.";
-                break;
-            default:
-                chargingText = "";
-        }
-
-        String text;
-        if (percent >= 0) {
-            text = "Poziom baterii " + percent + " procent. " + chargingText;
-        } else {
-            text = "Nie udało się obliczyć poziomu baterii. " + chargingText;
-        }
         return text;
     }
 
@@ -280,65 +239,7 @@ public class MainService extends AccessibilityService {
             sound.speak("Brak zgody na odczyt historii połączeń.");
             return;
         }
-
-        Uri uri = CallLog.Calls.CONTENT_URI;
-
-        String[] projection = new String[]{
-                CallLog.Calls.NUMBER,
-                CallLog.Calls.CACHED_NAME,
-                CallLog.Calls.DATE,    // Dodano datę
-                CallLog.Calls.TYPE,
-                CallLog.Calls.NEW
-        };
-
-        String selection = CallLog.Calls.TYPE + "=? AND " + CallLog.Calls.NEW + "=?";
-        String[] selectionArgs = new String[]{
-                String.valueOf(CallLog.Calls.MISSED_TYPE),
-                "1"
-        };
-
-        String sortOrder = CallLog.Calls.DATE + " DESC LIMIT 1";
-
-        try (Cursor cursor = getContentResolver().query(
-                uri,
-                projection,
-                selection,
-                selectionArgs,
-                sortOrder
-        )) {
-            if (cursor != null && cursor.moveToFirst()) {
-                String number = cursor.getString(cursor.getColumnIndexOrThrow(CallLog.Calls.NUMBER));
-                String name = cursor.getString(cursor.getColumnIndexOrThrow(CallLog.Calls.CACHED_NAME));
-                long dateMs = cursor.getLong(cursor.getColumnIndexOrThrow(CallLog.Calls.DATE)); // Pobranie czasu w ms
-
-                // Formatowanie czasu (np. "14:30")
-                java.text.SimpleDateFormat timeFormat = new java.text.SimpleDateFormat("HH:mm", LOCALE_PL);
-                String timeText = timeFormat.format(new java.util.Date(dateMs));
-
-                // Opcjonalnie: sprawdzenie czy to dzisiaj, czy wczoraj
-                String dayText = android.text.format.DateUtils.isToday(dateMs) ? "dzisiaj" : "wcześniej";
-
-                String who;
-                if (name != null && !name.isEmpty()) {
-                    who = name;
-                } else if (number != null && !number.isEmpty()) {
-                    who = "numer " + number;
-                } else {
-                    who = "nieznany numer";
-                }
-
-                // Budowa pełnego komunikatu
-                String text = "Ostatnie nieodebrane połączenie od " + who +
-                        ", o godzinie " + timeText + " " + dayText + ".";
-
-                sound.speak(text);
-            } else {
-                sound.speak("Brak nowych nieodebranych połączeń.");
-            }
-        } catch (Exception e) {
-            Log.e("KGO", "speakLastMissedCall error", e);
-            sound.speak("Nie udało się odczytać nieodebranych połączeń.");
-        }
+        LastCalls.speakLastMissedCall(this, sound, LOCALE_PL);
     }
 
     private void launchAssistant() {
