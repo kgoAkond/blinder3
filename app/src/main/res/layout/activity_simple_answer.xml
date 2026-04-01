@@ -14,7 +14,7 @@
         android:padding="8dp"
         android:text="Dzwoni"
         android:textColor="@color/black"
-        android:textSize="15sp" />
+        android:textSize="35sp" />
     <View
         android:layout_width="0dp"
         android:layout_height="36dp" />

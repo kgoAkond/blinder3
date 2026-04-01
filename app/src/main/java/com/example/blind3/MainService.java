@@ -9,11 +9,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.pm.PackageManager;
-import android.database.Cursor;
-import android.net.Uri;
-import android.os.BatteryManager;
 import android.os.Build;
-import android.provider.CallLog;
 import android.telecom.Call;
 import android.util.Log;
 import android.view.KeyEvent;
@@ -31,12 +27,13 @@ import java.util.Locale;
 
 public class MainService extends AccessibilityService {
 
+    public static final Locale LOCALE_PL = new Locale("pl", "PL");
     private static final String TAG = "KGO";
     private static final long DEBOUNCE_MS = 200L;
-    private static final Locale LOCALE_PL = new Locale("pl", "PL");
     private static final DateTimeFormatter FMT = DateTimeFormatter.ofPattern("HH:mm");
     private static final DateTimeFormatter DATE_FMT = DateTimeFormatter.ofPattern("EEEE, d MMMM yyyy", LOCALE_PL);
     static MainService sInstance;
+    private static Call ringingCall = null;
     private SoundManager sound;
     private long lastHandledAt = 0L;
     private int lastConsumedKey = -1;
@@ -44,7 +41,6 @@ public class MainService extends AccessibilityService {
     private BroadcastReceiver screenReceiver;
     private AppStateService appStateService;
     private Contacts contacts;
-    private static Call ringingCall = null;
 
     public static SoundManager getSound() {
         if (sInstance != null) {
@@ -69,7 +65,7 @@ public class MainService extends AccessibilityService {
             public void onReceive(Context context, Intent intent) {
                 if (Intent.ACTION_SCREEN_ON.equals(intent.getAction())) {
                     Log.d("KGO", "ACTION_SCREEN_ON -> playRobot()");
-                    sound.playSound();
+                    sound.speak("Czekam na rozkazy");
                 }
             }
         };
@@ -95,35 +91,14 @@ public class MainService extends AccessibilityService {
             }
             return false;
         }
-
         if (event.getAction() != KeyEvent.ACTION_DOWN) return false;
         if (event.getRepeatCount() > 0) return false;
         Log.d("KGO", "code: " + code + " ringing " + MyInCallService.getCallState() + " name " + MyInCallService.getContactName());
 
-        if (MyInCallService.getCallState() == Call.STATE_RINGING && code != KeyEvent.KEYCODE_DPAD_CENTER) {
-            String caller = MyInCallService.getContactName();
-            if (caller != null && !caller.isEmpty()) {
-                Log.d("TimeSpeakerService", "Key 2 pressed. Announcing caller: " + caller);
-                sound.speak("Dzwoni " + caller);
-            } else {
-                sound.speak("Nieznany numer");
-            }
-            return true;
-        }
-
-        if (MyInCallService.getCallState() == Call.STATE_ACTIVE && code != KeyEvent.KEYCODE_DPAD_CENTER) {
-            MyInCallService.toggleSpeaker();
-            return true;
-        }
+        if (onCallAndRinging(code)) return true;
 
         var step = appStateService.process(code);
-        if (code == KeyEvent.KEYCODE_DPAD_CENTER) {
-            if (MyInCallService.answerRingingCallIfPossible() || MyInCallService.disconnectCallIfPossible()) {
-                return true;
-            } else {
-                step = StartActionEnum.CHECK_ACTIVE;
-            }
-        }
+
 
         if (step == StartActionEnum.EMPTY) return false;
 
@@ -153,7 +128,6 @@ public class MainService extends AccessibilityService {
             showStartActivity(text);
         } else if (step == StartActionEnum.CHECK_ACTIVE) {
             handleActiveAction();
-
         } else if (step == StartActionEnum.ASSISTANCE) {
             sound.muteTts();
             launchAssistant();
@@ -161,12 +135,65 @@ public class MainService extends AccessibilityService {
         } else if (isHot(step)) {
             handleHots(step);
         } else if (step == StartActionEnum.MISSED_CALL) {
-            lastSpokenKey = code;
-            speakLastMissedCall();
+            contacts.selectLastContact(this, code, sound);
         } else if (step == StartActionEnum.EMPTY) {
             return false;
         }
         return true;
+    }
+
+    private boolean onCallAndRinging(int code) {
+        var callState = MyInCallService.getCallState();
+        if (callState == Call.STATE_RINGING) {
+            if(code == KeyEvent.KEYCODE_DPAD_CENTER) {
+                MyInCallService.answerRingingCallIfPossible();
+                return true;
+            }
+            if (code == KeyEvent.KEYCODE_2 || code == KeyEvent.KEYCODE_ENDCALL || code == KeyEvent.KEYCODE_MENU || code == KeyEvent.KEYCODE_BACK) {
+                if(MyInCallService.disconnectCallIfPossible()) {
+                    sound.speak("Rozmowa rozłączona");
+                }
+                showStartActivity("Czekam na rozkazy");
+                return true;
+            }
+            if (isCodeNumber(code)) {
+                String caller = MyInCallService.getContactName();
+                if (caller != null && !caller.isEmpty()) {
+                    sound.speak("Dzwoni " + caller);
+                } else {
+                    sound.speak("Nieznany numer");
+                }
+                return true;
+            }
+        }
+        if (callState == Call.STATE_DIALING || callState == Call.STATE_CONNECTING) {
+            if(code == KeyEvent.KEYCODE_DPAD_CENTER) {
+                if(MyInCallService.disconnectCallIfPossible()) {
+                    sound.speak("Rozmowa rozłączona");
+                }
+                showStartActivity("Czekam na rozkazy");
+
+            }
+            return true;
+        }
+        if (callState == Call.STATE_ACTIVE)  {
+            if (isCodeNumber(code)) {
+                MyInCallService.toggleSpeaker();
+                return true;
+            }
+            if(code == KeyEvent.KEYCODE_DPAD_CENTER) {
+                if(MyInCallService.disconnectCallIfPossible()) {
+                    sound.speak("Rozmowa rozłączona");
+                }
+                showStartActivity("Czekam na rozkazy");
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean isCodeNumber(int code) {
+        return code > 6 && code < 17;
     }
 
     private boolean isHot(StartActionEnum act) {
@@ -205,7 +232,7 @@ public class MainService extends AccessibilityService {
         }
     }
 
-    private void showStartActivity(String text) {
+    public void showStartActivity(String text) {
         StartActivity.setText(text);
         Intent intent = new Intent(this, StartActivity.class);
         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK
@@ -239,11 +266,11 @@ public class MainService extends AccessibilityService {
             sound.speak("Brak zgody na odczyt historii połączeń.");
             return;
         }
-        LastCalls.speakLastMissedCall(this, sound, LOCALE_PL);
+        LastCalls.speakLastMissedCall(this, sound);
     }
 
     private void launchAssistant() {
-        sound.playSound();
+        sound.speak("Słucham mów");
         try {
             Intent intent;
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {

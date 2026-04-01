@@ -1,5 +1,6 @@
 package com.example.blind3;
 
+import com.example.blind3.features.LastCalls;
 import com.example.blind3.model.Contact;
 
 import java.util.ArrayList;
@@ -19,7 +20,7 @@ public class Contacts {
             new Contact("Magda Konopko", "606301411", 4, 1),
             new Contact("Jasia Brenienek", "664250942", 5, 0),
             new Contact("Przychodnia Smolec", "713111811", 5, 1),
-            //new Contact("Ewa Górska", "537682266", 6, 0),
+            new Contact("Ewa Górska", "537682266", 6, 0),
             new Contact("Tadeusz Pióro", "784184048", 6, 1),
             new Contact("Irek", "577081762", 7, 0),
             new Contact("Tymon Godzwoń", "693565095", 7, 1),
@@ -29,7 +30,8 @@ public class Contacts {
             new Contact("Wito", "518730114", 9, 1),
             new Contact("112", "112", 9, 1)
     );
-    private final static long EXPIRED_TIME = 10000;
+    public List<Contact> lastContacts;
+    private final static long EXPIRED_TIME = 20000;
     private int state = 0;
     private int lastKey = -1;
     private Contact selectedContact = null;
@@ -59,6 +61,24 @@ public class Contacts {
 
     public Contact selectContact(int key) {
         return selectContact(key, null);
+    }
+
+    public void selectLastContact(MainService mainService, int key, SoundManager sound) {
+        checkIfSelectedTimeouted();
+        if (lastKey != key) {
+            state = 0;
+            lastContacts = LastCalls.getLastCalls(mainService);
+        }
+        lastKey = key;
+        if (lastContacts == null || lastContacts.isEmpty()) return;
+        selectedContact = lastContacts.get(state % lastContacts.size());
+        if (sound != null) {
+            sound.speak(selectedContact.name());
+        }
+        lastSelectedTime = System.currentTimeMillis();
+        state++;
+        sound.speak(selectedContact.getDesc());
+        mainService.showStartActivity("Zadzwoń do " + selectedContact.name());
     }
 
     public Contact selectContact(int key, SoundManager sound) {
